@@ -1,0 +1,362 @@
+-- rename by prince
+local Players = game:GetService("Players")
+local RunService = game:GetService("RunService")
+local UserInputService = game:GetService("UserInputService")
+local TweenService = game:GetService("TweenService")
+local HttpService = game:GetService("HttpService")
+local LocalPlayer = Players.LocalPlayer
+
+local BACKGROUND_COLOR = Color3.fromRGB(18, 0, 36)
+local CARD_BACKGROUND = Color3.fromRGB(35, 10, 60)
+local CARD_HOVER = Color3.fromRGB(55, 20, 90)
+local BORDER_COLOR = Color3.fromRGB(80, 25, 130)
+local HIGHLIGHT_BORDER = Color3.fromRGB(130, 45, 190)
+local WHITE = Color3.fromRGB(255, 255, 255)
+local KEYBIND_BACKGROUND = Color3.fromRGB(10, 0, 20)
+local PURPLE_ACCENT = Color3.fromRGB(180, 80, 255)
+
+local pluginState = {
+    isAutoBatEnabled = false,
+    isHitting = false,
+    isGuiVisible = true,
+}
+
+local keybinds = {
+    autoBat = Enum.KeyCode.X,
+    toggleGui = Enum.KeyCode.LeftControl,
+}
+
+local localHumanoid, localRootPart = nil, nil
+
+local function saveConfiguration()
+    local configData = { autoBatKey = keybinds.autoBat.Name }
+    pcall(function()
+        writefile("EnvyAutoBatDesyncConfig.json", HttpService:JSONEncode(configData))
+    end)
+end
+
+local function loadConfiguration()
+    local success, hasFile = pcall(function() return isfile("EnvyAutoBatDesyncConfig.json") end)
+    if not success or not hasFile then return end
+    local successDecode, decodedConfig = pcall(function()
+        return HttpService:JSONDecode(readfile("EnvyAutoBatDesyncConfig.json"))
+    end)
+    if successDecode and decodedConfig and decodedConfig.autoBatKey then
+        local foundKey = Enum.KeyCode[decodedConfig.autoBatKey]
+        if foundKey then
+            keybinds.autoBat = foundKey
+        end
+    end
+end
+loadConfiguration()
+
+for _, guiName in pairs({"EnvyAutoBatDesyncGUI", "MwvaneNewaBatDesyncGUI", "PhazeAutoBatDesyncGUI", "CZBatTPGUI"}) do
+    local existingGui = game:GetService("CoreGui"):FindFirstChild(guiName)
+    if existingGui then existingGui:Destroy() end
+end
+
+local screenGui = Instance.new("ScreenGui")
+screenGui.Name = "CZBatTPGUI"
+screenGui.ResetOnSpawn = false
+screenGui.DisplayOrder = 10
+screenGui.IgnoreGuiInset = true
+screenGui.Parent = LocalPlayer:WaitForChild("PlayerGui")
+
+local mainFrame = Instance.new("Frame", screenGui)
+mainFrame.Name = "Main"
+mainFrame.Size = UDim2.new(0, 210, 0, 115)
+mainFrame.Position = UDim2.new(0.5, -105, 0.5, -57.5)
+mainFrame.BackgroundColor3 = BACKGROUND_COLOR
+mainFrame.BackgroundTransparency = 1
+mainFrame.BorderSizePixel = 0
+mainFrame.Active = true
+mainFrame.ClipsDescendants = true
+Instance.new("UICorner", mainFrame).CornerRadius = UDim.new(0, 10)
+local mainStroke = Instance.new("UIStroke", mainFrame)
+mainStroke.Color = BORDER_COLOR
+mainStroke.Thickness = 1
+
+local backgroundImage = Instance.new("ImageLabel", mainFrame)
+backgroundImage.Size = UDim2.new(1, 0, 1, 0)
+backgroundImage.BackgroundColor3 = BACKGROUND_COLOR
+backgroundImage.BackgroundTransparency = 0
+backgroundImage.Image = "rbxassetid://134958245929351"
+backgroundImage.BorderSizePixel = 0
+backgroundImage.ZIndex = 0
+Instance.new("UICorner", backgroundImage).CornerRadius = UDim.new(0, 10)
+
+do
+    local isDragging, dragStartInput, dragStartPosition, frameStartPosition
+    mainFrame.InputBegan:Connect(function(input)
+        if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then
+            isDragging = true
+            dragStartPosition = input.Position
+            frameStartPosition = mainFrame.Position
+            input.Changed:Connect(function()
+                if input.UserInputState == Enum.UserInputState.End then isDragging = false end
+            end)
+        end
+    end)
+    mainFrame.InputChanged:Connect(function(input)
+        if input.UserInputType == Enum.UserInputType.MouseMovement or input.UserInputType == Enum.UserInputType.Touch then
+            dragStartInput = input
+        end
+    end)
+    UserInputService.InputChanged:Connect(function(input)
+        if input == dragStartInput and isDragging then
+            local deltaX = input.Position.X - dragStartPosition.X
+            local deltaY = input.Position.Y - dragStartPosition.Y
+            mainFrame.Position = UDim2.new(frameStartPosition.X.Scale, frameStartPosition.X.Offset + deltaX, frameStartPosition.Y.Scale, frameStartPosition.Y.Offset + deltaY)
+        end
+    end)
+end
+
+local header = Instance.new("Frame", mainFrame)
+header.Size = UDim2.new(1, 0, 0, 55)
+header.BackgroundColor3 = Color3.fromRGB(12, 0, 24)
+header.BackgroundTransparency = 0.6
+header.BorderSizePixel = 0
+header.ZIndex = 5
+Instance.new("UICorner", header).CornerRadius = UDim.new(0, 10)
+local headerPatch = Instance.new("Frame", header)
+headerPatch.Size = UDim2.new(1, 0, 0, 10)
+headerPatch.Position = UDim2.new(0, 0, 1, -10)
+headerPatch.BackgroundColor3 = Color3.fromRGB(12, 0, 24)
+headerPatch.BackgroundTransparency = 0.6
+headerPatch.BorderSizePixel = 0
+headerPatch.ZIndex = 4
+
+local titleLabel = Instance.new("TextLabel", header)
+titleLabel.Size = UDim2.new(0, 120, 0, 14)
+titleLabel.Position = UDim2.new(0, 10, 0, 4)
+titleLabel.BackgroundTransparency = 1
+titleLabel.Text = "CZ BAT TP"
+titleLabel.TextColor3 = PURPLE_ACCENT
+titleLabel.Font = Enum.Font.GothamBlack
+titleLabel.TextSize = 12
+titleLabel.TextXAlignment = Enum.TextXAlignment.Left
+titleLabel.ZIndex = 6
+
+local closeButton = Instance.new("TextButton", mainFrame)
+closeButton.Size = UDim2.new(0, 20, 0, 20)
+closeButton.Position = UDim2.new(1, -26, 0, 6)
+closeButton.BackgroundColor3 = Color3.fromRGB(30, 0, 50)
+closeButton.BorderSizePixel = 0
+closeButton.Text = "X"
+closeButton.TextColor3 = WHITE
+closeButton.Font = Enum.Font.GothamBlack
+closeButton.TextSize = 10
+closeButton.ZIndex = 10
+Instance.new("UICorner", closeButton).CornerRadius = UDim.new(0, 5)
+local closeStroke = Instance.new("UIStroke", closeButton)
+closeStroke.Color = BORDER_COLOR
+closeButton.MouseButton1Click:Connect(function()
+    pluginState.isAutoBatEnabled = false
+    screenGui:Destroy()
+end)
+
+local contentFrame = Instance.new("Frame", mainFrame)
+contentFrame.Size = UDim2.new(1, -14, 1, -75)
+contentFrame.Position = UDim2.new(0, 7, 0, 58)
+contentFrame.BackgroundTransparency = 1
+contentFrame.BorderSizePixel = 0
+
+local toggleRow = Instance.new("Frame", contentFrame)
+toggleRow.Size = UDim2.new(1, 0, 0, 28)
+toggleRow.BackgroundColor3 = CARD_BACKGROUND
+toggleRow.BorderSizePixel = 0
+Instance.new("UICorner", toggleRow).CornerRadius = UDim.new(0, 6)
+Instance.new("UIStroke", toggleRow).Color = BORDER_COLOR
+
+local toggleLabel = Instance.new("TextLabel", toggleRow)
+toggleLabel.Size = UDim2.new(0, 70, 1, 0)
+toggleLabel.Position = UDim2.new(0, 8, 0, 0)
+toggleLabel.BackgroundTransparency = 1
+toggleLabel.Text = "Auto Bat"
+toggleLabel.TextColor3 = WHITE
+toggleLabel.Font = Enum.Font.GothamBold
+toggleLabel.TextSize = 10
+toggleLabel.TextXAlignment = Enum.TextXAlignment.Left
+
+local keybindButton = Instance.new("TextButton", toggleRow)
+keybindButton.Size = UDim2.new(0, 38, 0, 18)
+keybindButton.Position = UDim2.new(1, -78, 0.5, -9)
+keybindButton.BackgroundColor3 = KEYBIND_BACKGROUND
+keybindButton.BorderSizePixel = 0
+keybindButton.Text = keybinds.autoBat.Name
+keybindButton.TextColor3 = WHITE
+keybindButton.Font = Enum.Font.GothamBold
+keybindButton.TextSize = 7
+keybindButton.ZIndex = 11
+Instance.new("UICorner", keybindButton).CornerRadius = UDim.new(0, 4)
+local keyStroke = Instance.new("UIStroke", keybindButton)
+keyStroke.Color = HIGHLIGHT_BORDER
+keyStroke.Thickness = 1
+local isListening = false
+local keyConnection
+
+local function stopKeyListening(key)
+    isListening = false
+    if keyConnection then keyConnection:Disconnect() keyConnection = nil end
+    TweenService:Create(keyStroke, TweenInfo.new(0.1), {Color = HIGHLIGHT_BORDER}):Play()
+    keybindButton.TextColor3 = WHITE
+    if key then
+        keybindButton.Text = key.Name
+        keybinds.autoBat = key
+        saveConfiguration()
+    end
+end
+
+keybindButton.MouseButton1Click:Connect(function()
+    if isListening then stopKeyListening(nil) return end
+    isListening = true
+    keybindButton.Text = "..."
+    TweenService:Create(keyStroke, TweenInfo.new(0.1), {Color = WHITE}):Play()
+    keyConnection = UserInputService.InputBegan:Connect(function(input)
+        if not isListening then return end
+        if input.UserInputType == Enum.UserInputType.Keyboard then
+            if input.KeyCode == Enum.KeyCode.Escape then stopKeyListening(nil) return end
+            stopKeyListening(input.KeyCode)
+        end
+    end)
+end)
+
+local pillFrame = Instance.new("Frame", toggleRow)
+pillFrame.Size = UDim2.new(0, 32, 0, 17)
+pillFrame.Position = UDim2.new(1, -40, 0.5, -8.5)
+pillFrame.BackgroundColor3 = Color3.fromRGB(30, 5, 55)
+pillFrame.BorderSizePixel = 0
+pillFrame.ZIndex = 8
+Instance.new("UICorner", pillFrame).CornerRadius = UDim.new(0, 9)
+local pillStroke = Instance.new("UIStroke", pillFrame)
+pillStroke.Color = HIGHLIGHT_BORDER
+local pillDot = Instance.new("Frame", pillFrame)
+pillDot.Size = UDim2.new(0, 11, 0, 11)
+pillDot.Position = UDim2.new(0, 2, 0.5, -5.5)
+pillDot.BackgroundColor3 = Color3.fromRGB(60, 20, 90)
+pillDot.BorderSizePixel = 0
+pillDot.ZIndex = 9
+Instance.new("UICorner", pillDot).CornerRadius = UDim.new(0, 3)
+
+local function updateToggleVisual(on)
+    TweenService:Create(pillFrame, TweenInfo.new(0.18), {BackgroundColor3 = on and WHITE or Color3.fromRGB(30, 5, 55)}):Play()
+    TweenService:Create(pillStroke, TweenInfo.new(0.18), {Color = on and WHITE or HIGHLIGHT_BORDER}):Play()
+    TweenService:Create(pillDot, TweenInfo.new(0.18, Enum.EasingStyle.Back), {
+        Position = on and UDim2.new(1, -13, 0.5, -5.5) or UDim2.new(0, 2, 0.5, -5.5),
+        BackgroundColor3 = on and BACKGROUND_COLOR or Color3.fromRGB(60, 20, 90)
+    }):Play()
+end
+
+local toggleButton = Instance.new("TextButton", toggleRow)
+toggleButton.Size = UDim2.new(1, 0, 1, 0)
+toggleButton.BackgroundTransparency = 1
+toggleButton.Text = ""
+toggleButton.MouseButton1Click:Connect(function()
+    pluginState.isAutoBatEnabled = not pluginState.isAutoBatEnabled
+    updateToggleVisual(pluginState.isAutoBatEnabled)
+end)
+
+local discordFrame = Instance.new("Frame", mainFrame)
+discordFrame.Size = UDim2.new(1, 0, 0, 18)
+discordFrame.Position = UDim2.new(0, 0, 1, -18)
+discordFrame.BackgroundColor3 = KEYBIND_BACKGROUND
+discordFrame.BackgroundTransparency = 0.4
+discordFrame.BorderSizePixel = 0
+Instance.new("UICorner", discordFrame).CornerRadius = UDim.new(0, 6)
+
+local discordLabel = Instance.new("TextLabel", discordFrame)
+discordLabel.Size = UDim2.new(1, 0, 1, 0)
+discordLabel.BackgroundTransparency = 1
+discordLabel.Text = "discord.gg/p3E77CCeJE"
+discordLabel.TextColor3 = PURPLE_ACCENT
+discordLabel.Font = Enum.Font.GothamBold
+discordLabel.TextSize = 9
+
+local function getBat()
+    local character = LocalPlayer.Character
+    if not character then return nil end
+    local tool = character:FindFirstChild("Bat")
+    if tool then return tool end
+    local backpack = LocalPlayer:FindFirstChild("Backpack")
+    if backpack then
+        tool = backpack:FindFirstChild("Bat")
+        if tool then tool.Parent = character return tool end
+    end
+    return nil
+end
+
+local function executeHit()
+    if pluginState.isHitting then return end
+    pluginState.isHitting = true
+    pcall(function()
+        local bat = getBat()
+        if bat then
+            bat:Activate()
+            local remote = bat:FindFirstChildWhichIsA("RemoteEvent")
+            if remote then remote:FireServer() end
+        end
+    end)
+    task.delay(0.08, function() pluginState.isHitting = false end)
+end
+
+local function getClosestPlayer()
+    if not localRootPart then return nil, math.huge end
+    local closestPlayer, minDistance = nil, math.huge
+    for _, player in pairs(Players:GetPlayers()) do
+        if player ~= LocalPlayer and player.Character then
+            local root = player.Character:FindFirstChild("HumanoidRootPart")
+            if root then
+                local distance = (localRootPart.Position - root.Position).Magnitude
+                if distance < minDistance then
+                    minDistance = distance
+                    closestPlayer = player
+                end
+            end
+        end
+    end
+    return closestPlayer, minDistance
+end
+
+local function setupCharacter(character)
+    task.wait(0.1)
+    localHumanoid = character:WaitForChild("Humanoid", 5)
+    localRootPart = character:WaitForChild("HumanoidRootPart", 5)
+end
+
+LocalPlayer.CharacterAdded:Connect(setupCharacter)
+if LocalPlayer.Character then task.spawn(setupCharacter, LocalPlayer.Character) end
+
+RunService.Heartbeat:Connect(function()
+    if not (pluginState.isAutoBatEnabled and localHumanoid and localRootPart) then return end
+    local target, distance = getClosestPlayer()
+    if target and target.Character then
+        local targetRoot = target.Character:FindFirstChild("HumanoidRootPart")
+        if targetRoot then
+            if sethiddenproperty then
+                sethiddenproperty(localRootPart, "PhysicsRepRootPart", targetRoot)
+            end
+            local targetPosition = targetRoot.Position + Vector3.new(0, 0.9, 0)
+            if (localRootPart.Position - targetPosition).Magnitude > 8 then
+                localRootPart.CFrame = CFrame.new(targetPosition)
+            end
+            local camera = workspace.CurrentCamera
+            camera.CFrame = CFrame.new(camera.CFrame.Position, targetRoot.Position)
+            executeHit()
+        end
+    end
+end)
+
+UserInputService.InputBegan:Connect(function(input, isGameProcessed)
+    if isGameProcessed then return end
+    if input.UserInputType == Enum.UserInputType.Keyboard then
+        if input.KeyCode == keybinds.autoBat then
+            pluginState.isAutoBatEnabled = not pluginState.isAutoBatEnabled
+            updateToggleVisual(pluginState.isAutoBatEnabled)
+        elseif input.KeyCode == keybinds.toggleGui then
+            pluginState.isGuiVisible = not pluginState.isGuiVisible
+            mainFrame.Visible = pluginState.isGuiVisible
+        end
+    end
+end)
+
+print("[CZ BAT TP] Loaded! (Purple theme, compact GUI, Discord invite)")
